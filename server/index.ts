@@ -1,11 +1,11 @@
+/* eslint-disable global-require */
+/* eslint-disable no-console */
 import path from 'path';
 import next from 'next';
 import nextBuild from 'next/dist/build';
 import express from 'express';
 import payload from 'payload';
 import { config as dotenv } from 'dotenv';
-import { home } from '../seed/home';
-import { sample } from '../seed/sample';
 
 dotenv({
   path: path.resolve(__dirname, '../.env'),
@@ -14,61 +14,30 @@ dotenv({
 const dev = process.env.NODE_ENV !== 'production';
 const server = express();
 
-const start = async () => {
-  await payload.init({
-    secret: process.env.PAYLOAD_SECRET,
-    mongoURL: process.env.MONGODB_URI,
-    express: server,
-    onInit: async () => {
-      if (process.env.SEED_DATABASE === 'true') {
-        const { id: createdMedia } = await payload.create({
-          collection: 'media',
-          data: {
-            alt: 'Payload',
-          },
-          filePath: path.resolve(__dirname, './payload.jpg'),
-        });
+payload.init({
+  secret: process.env.PAYLOAD_SECRET,
+  mongoURL: process.env.MONGODB_URI,
+  express: server,
+});
 
-        const { id: createdSamplePage } = await payload.create({
-          collection: 'pages',
-          data: sample,
-        });
+if (!process.env.NEXT_BUILD) {
+  const nextApp = next({ dev });
 
-        const homeString = JSON.stringify(home)
-          .replace(/{{IMAGE_ID}}/g, createdMedia)
-          .replace(/{{SAMPLE_PAGE_ID}}/g, createdSamplePage);
+  const nextHandler = nextApp.getRequestHandler();
 
-        payload.create({
-          collection: 'pages',
-          data: JSON.parse(homeString),
-        });
+  server.get('*', (req, res) => nextHandler(req, res));
 
-        console.log('Seed completed!');
-      }
-    },
-  });
+  nextApp.prepare().then(() => {
+    console.log('NextJS started');
 
-  if (!process.env.NEXT_BUILD) {
-    const nextApp = next({ dev });
-
-    const nextHandler = nextApp.getRequestHandler();
-
-    server.get('*', (req, res) => nextHandler(req, res));
-
-    nextApp.prepare().then(() => {
-      console.log('NextJS started');
-
-      server.listen(process.env.PORT, async () => {
-        console.log(`Server listening on ${process.env.PORT}...`);
-      });
-    });
-  } else {
     server.listen(process.env.PORT, async () => {
-      console.log('NextJS is now building...');
-      await nextBuild(path.join(__dirname, '../'));
-      process.exit();
+      console.log(`Server listening on ${process.env.PORT}...`);
     });
-  }
-};
-
-start();
+  });
+} else {
+  server.listen(process.env.PORT, async () => {
+    console.log('NextJS is now building...');
+    await nextBuild(path.join(__dirname, '../'));
+    process.exit();
+  });
+}
